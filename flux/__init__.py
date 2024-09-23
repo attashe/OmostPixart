@@ -1,0 +1,11 @@
+deterministic = False
+directml_enabled = False
+device = 'cuda'
+offload: bool = True
+is_schnell: bool = True
+flux_name = "flux-dev"
+flux_path = "J:/Weights/Flux/flux1-dev-fp8.safetensors"
+disable_cast_weight_init = True
+ae_path = "J:/Weights/Flux/ae.safetensors"
+clip_path = "openai/clip-vit-large-patch14"
+t5_path = "K:/Weights/t5-v1_1-xxl"

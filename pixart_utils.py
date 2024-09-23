@@ -134,9 +134,10 @@ class Text2ImageModel:
         self.unload_model()
     
     # boxes: List[List[int]]
-    def inference_bbox(self, prompt: str, negative_prompt: str, masks: List[Image.Image], sub_prompts: List[str],
+    def inference_bbox(self, prompt: str, negative_prompt: str,
+                       masks: List[Image.Image], subprompts: List[str],
                        aspect_ratio: str, seed: int,
-                       cfg: float = 3.5, steps: int = 20,
+                       guidance: float = 3.5, steps: int = 20,
                        normalization_type="first", cfg_schedule_type="constant",
                        scale_to_one=False, negative_rescale=False,):
         # Second pass is not working
@@ -160,8 +161,9 @@ class Text2ImageModel:
         img, _ = generate_img_regions(
             self.model, self.llm_embed_model, self.vae,
             prompt_ar,
-            sampler, steps, cfg, negative_prompt=negative_prompt, seed=seed, dtype=torch.float16,
-            reg_prompts=sub_prompts,
+            sampler, steps, guidance, negative_prompt=negative_prompt, 
+            seed=seed, dtype=torch.bfloat16,
+            reg_prompts=subprompts,
             masks=masks,
             scale_type='second_rescale',
             scale_to_one=True,

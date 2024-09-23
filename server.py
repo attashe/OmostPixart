@@ -7,13 +7,16 @@ import urllib.parse
 import urllib.error
 import numpy as np
 
+from pathlib import Path
 from flask import Flask, send_file
 from flask_socketio import SocketIO, send, emit
 from PIL import Image, ImageDraw
+from PIL.PngImagePlugin import PngInfo
 
 import lib_omost.canvas as omost_canvas
 from pixart_utils import Text2ImageModel, OmostLLM
 from threading import Thread, Lock
+from flux.generate import FluxInference
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -54,7 +57,8 @@ class ImageStorage:
 
 class Context:
     image_id: int = 1
-    t2i_model: Text2ImageModel = None
+    # t2i_model: Text2ImageModel = None
+    t2i_model: FluxInference = None
     image_storage = ImageStorage(50)
     lock = Lock()
 
@@ -64,7 +68,7 @@ def generate_image_wrapper(payload):
     with Context.lock:
         bboxes = payload['prompt']['bboxes']
         masks = []
-        sub_prompts = []
+        subprompts = []
         
         for bbox in bboxes:
             mask = Image.new('L', (payload['prompt']['width'], payload['prompt']['height']), 0)
@@ -79,23 +83,37 @@ def generate_image_wrapper(payload):
             mask.save(f'mask_{bbox["idx"]}.png')
             
             masks.append(mask)
-            sub_prompts.append(bbox['caption'])
+            subprompts.append(bbox['caption'])
             
         # Mock the image
         # image = Image.new('RGB', (payload['prompt']['width'], payload['prompt']['height']), "blue")
         
-        if Context.t2i_model is None:
-            Context.t2i_model = Text2ImageModel()
+        # if Context.t2i_model is None:
+            # Context.t2i_model = Text2ImageModel()        
         
         image = Context.t2i_model.inference_bbox(
             prompt=payload['prompt']['positive'], negative_prompt=payload['prompt']['negative'],
-            masks=masks, sub_prompts=sub_prompts,
+            masks=masks, subprompts=subprompts,
             aspect_ratio='1:1', seed=int(payload['prompt']['seed']), steps=int(payload['prompt']['steps']),
-            cfg=float(payload['prompt']['cfg']),
+            guidance=float(payload['prompt']['cfg']),
+            height=payload['prompt']['height'], width=payload['prompt']['width']
         )
         
         Context.image_storage[Context.image_id] = Image.fromarray(image)
-        
+    
+    # Create a folder for the outputs
+    Path(f'outputs').mkdir(parents=True, exist_ok=True)
+    
+    # Save the image with the image ID and all payload as metadata
+    metadata = PngInfo()
+    metadata.add_text('payload', json.dumps(payload))
+    image = Image.fromarray(image)
+    image.save(f'image_{Context.image_id}.png', pnginfo=metadata)
+    
+    # Save payload to a file
+    with open(f'payload_{Context.image_id}.json', 'w') as f:
+        json.dump(payload, f)
+    
     # emit('image_generated', {'image_id': Context.image_id})
 
 
@@ -134,9 +152,10 @@ def generate_image():
     #   'idx': box_idx,
     # };
     
-    thread = Thread(target=generate_image_wrapper, args=(payload,), daemon=True)
-    thread.start()
-    thread.join()
+    # thread = Thread(target=generate_image_wrapper, args=(payload,), daemon=True)
+    # thread.start()
+    # thread.join()
+    generate_image_wrapper(payload)
     
     print(f'Image ID: {Context.image_id}')
     # emit('image_generated', {'image_id': Context.image_id}, namespace='/')
@@ -161,6 +180,9 @@ def get_image(input_image_id):
 
 def main():
     # Context.t2i_model = Text2ImageModel()
+    if Context.t2i_model is None:
+        # Context.t2i_model = Text2ImageModel()
+        Context.t2i_model = FluxInference()
     
     # Serve flask app
     # app.run(port=5001, debug=False)
